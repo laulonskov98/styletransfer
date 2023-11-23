@@ -13,10 +13,12 @@ import warnings
 
 from keras.models import Model
 from keras.layers import Input
-from keras.layers.convolutional import Convolution2D, AveragePooling2D, MaxPooling2D
+from keras.layers import Convolution2D, AveragePooling2D, MaxPooling2D
 from keras import backend as K
-from keras.utils.data_utils import get_file
-from keras.utils.layer_utils import convert_all_kernels_in_model
+from keras.utils import get_file
+import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
+
 
 """
 Neural Style Transfer with Keras 2.0.5
@@ -38,12 +40,14 @@ TF_19_WEIGHTS_PATH_NO_TOP = 'https://github.com/fchollet/deep-learning-models/re
 
 
 parser = argparse.ArgumentParser(description='Neural style transfer with Keras.')
+parser.add_argument('image_pairs', metavar='pairs', nargs='+', type=str,
+                    help='List of pairs, each pair contains two paths: base_image_path style_image_path')
+"""
 parser.add_argument('base_image_path', metavar='base', type=str,
                     help='Path to the image to transform.')
-
 parser.add_argument('syle_image_paths', metavar='ref', nargs='+', type=str,
                     help='Path to the style reference image.')
-
+"""
 parser.add_argument('result_prefix', metavar='res_prefix', type=str,
                     help='Prefix for the saved results.')
 
@@ -105,14 +109,23 @@ parser.add_argument('--min_improvement', default=0.0, type=float,
                     help='Defines minimum improvement required to continue script')
 
 
+
 def str_to_bool(v):
     return v.lower() in ("true", "yes", "t", "1")
 
 ''' Arguments '''
 
 args = parser.parse_args()
-base_image_path = args.base_image_path
-style_reference_image_paths = args.syle_image_paths
+
+image_pairs = [(args.image_pairs[i], args.image_pairs[i + 1]) for i in range(0, len(args.image_pairs), 2)]
+
+#base_image_path = args.base_image_path
+base_image_path = image_pairs[0][0]
+#style_reference_image_paths = args.syle_image_paths
+style_reference_image_paths =[ image_pairs[pair][1] for pair in range(0, len(image_pairs))  ]
+all_base_image_paths = [ image_pairs[pair][0] for pair in range(0, len(image_pairs))  ]
+
+
 result_prefix = args.result_prefix
 
 style_image_paths = []
@@ -206,7 +219,7 @@ def preprocess_image(image_path, load_dims=False, read_mode="color"):
         else:
             img_height = args.img_size
 
-    img = imresize(img, (img_width, img_height)).astype('float32')
+    img = imresize(img, (60, 60)).astype('float32')
 
     # RGB -> BGR
     img = img[:, :, ::-1]
@@ -224,6 +237,7 @@ def preprocess_image(image_path, load_dims=False, read_mode="color"):
 
 # util function to convert a tensor into a valid image
 def deprocess_image(x):
+    img_height=60
     if K.image_data_format() == "channels_first":
         x = x.reshape((3, img_width, img_height))
         x = x.transpose((1, 2, 0))
@@ -298,8 +312,7 @@ def pooling_func(x):
 
 
 # get tensor representations of our images
-base_image = K.variable(preprocess_image(base_image_path, True, read_mode=read_mode))
-
+"""
 style_reference_images = []
 for style_path in style_image_paths:
     style_reference_images.append(K.variable(preprocess_image(style_path)))
@@ -310,6 +323,29 @@ if K.image_data_format() == "channels_first":
 else:
     combination_image = K.placeholder((1, img_width, img_height, 3))
 
+base_image = K.variable(preprocess_image(all_base_image_paths[0], True, read_mode=read_mode))
+image_tensors = [base_image]
+    
+for style_image_tensor in style_reference_images:
+    image_tensors.append(style_image_tensor)
+
+image_tensors.append(combination_image)
+nb_tensors = len(image_tensors)
+nb_style_images = nb_tensors - 2 # Content and Output image not considered
+"""
+img_width,img_height = 60,60
+img_height = 60
+style_reference_images = []
+for style_path in style_image_paths:
+    style_reference_images.append(K.variable(preprocess_image(style_path)))
+
+# this will contain our generated image
+if K.image_data_format() == "channels_first":
+    combination_image = K.placeholder((1, 3, img_width, img_height))
+else:
+    combination_image = K.placeholder((1, img_width, img_height, 3))
+
+base_image = K.variable(preprocess_image(all_base_image_paths[0], True, read_mode=read_mode))
 image_tensors = [base_image]
 for style_image_tensor in style_reference_images:
     image_tensors.append(style_image_tensor)
@@ -317,7 +353,6 @@ image_tensors.append(combination_image)
 
 nb_tensors = len(image_tensors)
 nb_style_images = nb_tensors - 2 # Content and Output image not considered
-
 # combine the various images into a single Keras tensor
 input_tensor = K.concatenate(image_tensors, axis=0)
 
@@ -325,9 +360,7 @@ if K.image_data_format() == "channels_first":
     shape = (nb_tensors, 3, img_width, img_height)
 else:
     shape = (nb_tensors, img_width, img_height, 3)
-
-ip = Input(tensor=input_tensor, batch_shape=shape)
-
+ip = Input(tensor=input_tensor, batch_shape=(1, 60, 60, 3))
 # build the VGG16 network with our 3 images as input
 x = Convolution2D(64, (3, 3), activation='relu', name='conv1_1', padding='same')(ip)
 x = Convolution2D(64, (3, 3), activation='relu', name='conv1_2', padding='same')(x)
@@ -359,6 +392,7 @@ if args.model == "vgg19":
 x = pooling_func(x)
 
 model = Model(ip, x)
+K.set_image_data_format('channels_last') 
 
 if K.image_data_format() == "channels_first":
     if args.model == "vgg19":
@@ -458,6 +492,7 @@ def content_loss(base, combination):
 # the 3rd loss function, total variation loss,
 # designed to keep the generated image locally coherent
 def total_variation_loss(x):
+    img_height = 60
     assert K.ndim(x) == 4
     if K.image_data_format() == "channels_first":
         a = K.square(x[:, :, :img_width - 1, :img_height - 1] - x[:, :, 1:, :img_height - 1])
@@ -533,6 +568,7 @@ f_outputs = K.function([combination_image], outputs)
 
 
 def eval_loss_and_grads(x):
+    img_height = 60
     if K.image_data_format() == "channels_first":
         x = x.reshape((1, 3, img_width, img_height))
     else:
@@ -577,76 +613,71 @@ evaluator = Evaluator()
 # run scipy-based optimization (L-BFGS) over the pixels of the generated image
 # so as to minimize the neural style loss
 
+img_itr = 0
+for base_image_path in all_base_image_paths:
 
-if "content" in args.init_image or "gray" in args.init_image:
-    x = preprocess_image(base_image_path, True, read_mode=read_mode)
-elif "noise" in args.init_image:
-    x = np.random.uniform(0, 255, (1, img_width, img_height, 3)) - 128.
+    if "content" in args.init_image or "gray" in args.init_image:
+        x = preprocess_image(base_image_path, True, read_mode=read_mode)
+    elif "noise" in args.init_image:
+        x = np.random.uniform(0, 255, (1, img_width, img_height, 3)) - 128.
 
-    if K.image_data_format() == "channels_first":
-        x = x.transpose((0, 3, 1, 2))
-else:
-    print("Using initial image : ", args.init_image)
-    x = preprocess_image(args.init_image, read_mode=read_mode)
-
-# We require original image if we are to preserve color in YCbCr mode
-if preserve_color:
-    content = imread(base_image_path, mode="YCbCr")
-    content = imresize(content, (img_width, img_height))
-
-    if color_mask_present:
         if K.image_data_format() == "channels_first":
-            color_mask_shape = (None, None, img_width, img_height)
-        else:
-            color_mask_shape = (None, img_width, img_height, None)
+            x = x.transpose((0, 3, 1, 2))
+    else:
+        print("Using initial image : ", args.init_image)
+        x = preprocess_image(args.init_image, read_mode=read_mode)
 
-        color_mask = load_mask(args.color_mask, color_mask_shape, return_mask_img=True)
+    # We require original image if we are to preserve color in YCbCr mode
+    if preserve_color:
+        content = imread(base_image_path, mode="YCbCr")
+        content = imresize(content, (img_width, img_height))
+
+        if color_mask_present:
+            if K.image_data_format() == "channels_first":
+                color_mask_shape = (None, None, img_width, img_height)
+            else:
+                color_mask_shape = (None, img_width, img_height, None)
+
+            color_mask = load_mask(args.color_mask, color_mask_shape, return_mask_img=True)
+        else:
+            color_mask = None
     else:
         color_mask = None
-else:
-    color_mask = None
 
-num_iter = args.num_iter
-prev_min_val = -1
+    num_iter = args.num_iter
+    prev_min_val = -1
 
-improvement_threshold = float(args.min_improvement)
+    improvement_threshold = float(args.min_improvement)
 
-for i in range(num_iter):
-    print("Starting iteration %d of %d" % ((i + 1), num_iter))
-    start_time = time.time()
+    for i in range(num_iter):
 
-    x, min_val, info = fmin_l_bfgs_b(evaluator.loss, x.flatten(), fprime=evaluator.grads, maxfun=20)
+        x, min_val, info = fmin_l_bfgs_b(evaluator.loss, x.flatten(), fprime=evaluator.grads, maxfun=20)
 
-    if prev_min_val == -1:
+        if prev_min_val == -1:
+            prev_min_val = min_val
+
+        improvement = (prev_min_val - min_val) / prev_min_val * 100
+
+        print("Current loss value:", min_val, " Improvement : %0.3f" % improvement, "%")
         prev_min_val = min_val
+        # save current generated image
+    
+        if i+1 == num_iter:
+            img = deprocess_image(x.copy())
 
-    improvement = (prev_min_val - min_val) / prev_min_val * 100
+            if preserve_color and content is not None:
+                img = original_color_transform(content, img, mask=color_mask)
 
-    print("Current loss value:", min_val, " Improvement : %0.3f" % improvement, "%")
-    prev_min_val = min_val
-    # save current generated image
-    img = deprocess_image(x.copy())
+            img = imresize(img, (img_WIDTH, img_WIDTH), interp=args.rescale_method)
+            imsave(result_prefix+f"{img_itr}.jpg", img)
 
-    if preserve_color and content is not None:
-        img = original_color_transform(content, img, mask=color_mask)
 
-    if not rescale_image:
-        img_ht = int(img_width * aspect_ratio)
-        print("Rescaling Image to (%d, %d)" % (img_width, img_ht))
-        img = imresize(img, (img_width, img_ht), interp=args.rescale_method)
+            
 
-    if rescale_image:
-        print("Rescaling Image to (%d, %d)" % (img_WIDTH, img_HEIGHT))
-        img = imresize(img, (img_WIDTH, img_HEIGHT), interp=args.rescale_method)
+        if improvement_threshold is not 0.0:
+            if improvement < improvement_threshold and improvement is not 0.0:
+                print("Improvement (%f) is less than improvement threshold (%f). Early stopping script." %
+                    (improvement, improvement_threshold))
+                exit()
 
-    fname = result_prefix + "_at_iteration_%d.png" % (i + 1)
-    imsave(fname, img)
-    end_time = time.time()
-    print("Image saved as", fname)
-    print("Iteration %d completed in %ds" % (i + 1, end_time - start_time))
-
-    if improvement_threshold is not 0.0:
-        if improvement < improvement_threshold and improvement is not 0.0:
-            print("Improvement (%f) is less than improvement threshold (%f). Early stopping script." %
-                  (improvement, improvement_threshold))
-            exit()
+    img_itr += 1
