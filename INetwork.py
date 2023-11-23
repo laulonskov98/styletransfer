@@ -18,8 +18,8 @@ from keras import backend as K
 from keras.utils import get_file
 import tensorflow as tf
 tf.compat.v1.disable_eager_execution()
-from tf.compat.v1 import ConfigProto
-from tf.compat.v1 import InteractiveSession
+from tensorflow.compat.v1 import ConfigProto
+from tensorflow.compat.v1 import InteractiveSession
 
 config = ConfigProto()
 config.gpu_options.allow_growth = True
