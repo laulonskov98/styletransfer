@@ -20,11 +20,11 @@ import tensorflow as tf
 tf.compat.v1.disable_eager_execution()
 from tensorflow.compat.v1 import ConfigProto
 from tensorflow.compat.v1 import InteractiveSession
-
+"""
 config = ConfigProto()
 config.gpu_options.allow_growth = True
 session = InteractiveSession(config=config)
-
+"""
 """
 Neural Style Transfer with Keras 2.0.5
 
@@ -663,10 +663,10 @@ for base_image_path in all_base_image_paths:
 
         improvement = (prev_min_val - min_val) / prev_min_val * 100
 
-        print("Current loss value:", min_val, " Improvement : %0.3f" % improvement, "%")
+        #print("Current loss value:", min_val, " Improvement : %0.3f" % improvement, "%")
         prev_min_val = min_val
         # save current generated image
-    
+
         if i+1 == num_iter:
             img = deprocess_image(x.copy())
 
@@ -674,15 +674,23 @@ for base_image_path in all_base_image_paths:
                 img = original_color_transform(content, img, mask=color_mask)
 
             img = imresize(img, (img_WIDTH, img_WIDTH), interp=args.rescale_method)
-            imsave(result_prefix+f"{img_itr}.jpg", img)
+            imsave(result_prefix+str(img_itr)+".jpg", img)
 
 
             
 
-        if improvement_threshold is not 0.0:
+        if improvement_threshold is not 0.0 and improvement < 0:
             if improvement < improvement_threshold and improvement is not 0.0:
                 print("Improvement (%f) is less than improvement threshold (%f). Early stopping script." %
                     (improvement, improvement_threshold))
-                exit()
+
+                img = deprocess_image(x.copy())
+                if preserve_color and content is not None:
+                    img = original_color_transform(content, img, mask=color_mask)
+
+                img = imresize(img, (img_WIDTH, img_WIDTH), interp=args.rescale_method)
+                imsave(result_prefix+str(img_itr)+".jpg", img)
+
+                break
 
     img_itr += 1
