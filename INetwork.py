@@ -113,6 +113,9 @@ parser.add_argument('--preserve_color', dest='color', default="False", type=str,
 parser.add_argument('--min_improvement', default=0.0, type=float,
                     help='Defines minimum improvement required to continue script')
 
+parser.add_argument('--startcounter', default=0, type=int,
+                    help='Defines minimum improvement required to continue script')
+
 
 
 def str_to_bool(v):
@@ -653,6 +656,7 @@ for base_image_path in all_base_image_paths:
     prev_min_val = -1
 
     improvement_threshold = float(args.min_improvement)
+    start_counter = int(args.start_counter)
 
     for i in range(num_iter):
 
@@ -674,7 +678,7 @@ for base_image_path in all_base_image_paths:
                 img = original_color_transform(content, img, mask=color_mask)
 
             img = imresize(img, (img_WIDTH, img_WIDTH), interp=args.rescale_method)
-            imsave(result_prefix+str(img_itr)+".jpg", img)
+            imsave(result_prefix+str(img_itr+start_counter)+".jpg", img)
 
 
             
