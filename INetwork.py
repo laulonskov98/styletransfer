@@ -656,7 +656,7 @@ for base_image_path in all_base_image_paths:
     prev_min_val = -1
 
     improvement_threshold = float(args.min_improvement)
-    start_counter = int(args.start_counter)
+    start_counter = int(args.startcounter)
 
     for i in range(num_iter):
 
